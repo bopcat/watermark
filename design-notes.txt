@@ -35,4 +35,7 @@ The questions still to clarify:
 - Is there a limit for the document size?
 - How the watermarking status should be reported (just done/not done, or percentage, or what?)
 - How the components of the solution should be secured?
-
+- Is the document storage a permanent one (which might be the case if this is THE document storage in the company) 
+  or is it used just for thee watermarking service? In the latter case, what kind of retention policy should be used 
+  for the documents? E. g. deleting a document (an already watermarked one) right when it's downloaded (so in the worst
+  case of a system crash and resulting data loss it will need to be watermarked once again), or after some timeout, or...?
