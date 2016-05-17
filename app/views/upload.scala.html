@@ -1,0 +1,35 @@
+@helper.form(action = routes.Application.fileUploader, 'enctype -> "multipart/form-data") {
+
+<div>
+File:<br/>
+<input type="file" name="document">
+</div>
+
+<div>
+Type:<br/>
+<select name="content">
+    <option value="book">Book</option>
+    <option value="journal">Journal</option>
+</select>
+</div>
+
+<div>
+Title:<br/>
+<input type="text" name="title">
+</div>
+
+<div>
+Author:<br/>
+<input type="text" name="author">
+</div>
+
+<div>
+Topic:<br/>
+<input type="text" name="topic">
+</div>
+
+<div>
+    <input type="submit">
+</div>
+
+}

@@ -2,45 +2,95 @@ package controllers
 
 import akka.actor.ActorSystem
 import javax.inject._
-import controllers.HelloActor.SayHello
-import play.api.libs.json._
-import play.api.mvc._
-import models.Book._
 
+import play.api.mvc._
 import play.api.libs.concurrent.Execution.Implicits._
-import scala.concurrent.Future
-import scala.concurrent.duration._
-import play.api.Play.current
-import play.api.libs.ws.WS
-import play.api.libs.ws.WSResponse
+
+import play.api.mvc.BodyParsers.parse.multipartFormData
+import play.core.parsers.Multipart.handleFilePart
+import play.api.mvc.MultipartFormData.FilePart
+import play.api.libs.iteratee.{Enumerator, Iteratee}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import scala.util.control.Exception.allCatch
+import play.api.mvc.MultipartFormData
+import play.core.parsers.Multipart.{FileInfo, PartHandler}
+import com.mongodb.casbah.Imports._
+import com.mongodb.casbah.gridfs.{GridFS, GridFSDBFile}
+import org.bson.types.ObjectId
 
 @Singleton
 class Application @Inject() (system: ActorSystem) extends Controller {
 
-  val helloActor = system.actorOf(HelloActor.props, "hello-actor")
-  val cancellable = system.scheduler.schedule(
-    0.microseconds, 1000.milliseconds, helloActor, SayHello("" + System.currentTimeMillis))
+  val host = "localhost"
+  val port = 27017
+  val dbName = "watermark"
 
-  def listBooks = Action {
-    Ok(Json.toJson(books))
+  val gridFs = GridFS(
+    MongoClient(
+      new ServerAddress(host, port),
+      MongoClientOptions(connectTimeout = 500, socketTimeout = 500)
+    )(dbName)
+  )
+
+  val watermarker = system.actorOf(Watermarker.props, "watermarker")
+
+  def fileUploader = Action(multipartFormData(handleFilePartAsByteArray)) { request =>
+    //println(request.body.asFormUrlEncoded.get("title").mkString(""))
+    saveFileAndReturnId(request, "document") map { id =>
+      val hexString = id.toHexString()
+      watermarker ! hexString
+      Ok(hexString)
+    } getOrElse Ok("oops")
   }
 
-  def saveBook = Action(BodyParsers.parse.json) { request =>
-    val b = request.body.validate[Book]
-    b.fold(
-      errors => {
-        BadRequest(Json.obj("status" -> "OK", "message" -> JsError.toFlatJson(errors)))
-      },
-      book => {
-        addBook(book)
-        Ok(Json.obj("status" -> "OK"))
-      }
-    )
+  def saveFileAndReturnId(
+                                   request: Request[MultipartFormData[Array[Byte]]],
+                                   fileFieldName: String
+                                 ) = {
+    request.body.file(fileFieldName) flatMap {
+      filePart =>
+        if (filePart.contentType.getOrElse("") != "application/pdf") None
+        else
+          gridFs(new ByteArrayInputStream(filePart.ref)) {
+            f =>
+              f.filename = filePart.filename
+              f.contentType = filePart.contentType.getOrElse("")
+          } map { x => x.asInstanceOf[ObjectId] }
+    }
   }
 
-  def getRemoteResponse = Action.async { implicit request =>
-    val response = WS.url("https://query.yahooapis.com/v1/public/yql?q=select+*+from+yahoo.finance.xchange+where+pair+=+%22USDRUB,EURRUB%22&format=json&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys&callback=").get
-    Thread.sleep(30000)
-    response map {response => Ok(response.json)}
+  def handleFilePartAsByteArray: PartHandler[FilePart[Array[Byte]]] =
+    handleFilePart {
+      case FileInfo(partName, filename, contentType) =>
+        Iteratee.fold[Array[Byte], ByteArrayOutputStream](
+          new ByteArrayOutputStream()) { (os, data) =>
+          os.write(data)
+          os
+        }.map { os =>
+          os.close()
+          os.toByteArray
+        }
+    }
+
+  def getDocument(id: String) = Action { request =>
+    stringIdToResponse(id)(file => Result(
+      header = ResponseHeader(200),
+      body = Enumerator.fromStream(file.underlying.getInputStream)
+    ))
+  }
+
+  def getDocumentWatermarkingStatus(id: String) = Action { request =>
+    stringIdToResponse(id)(file => Ok(String.valueOf(file.underlying.containsField("watermark"))))
+  }
+
+  def stringIdToResponse(id: String)(fileToResponse: GridFSDBFile => Result) = (
+    for {
+      objectId <- allCatch opt new ObjectId(id)
+      file <- gridFs.findOne(objectId)
+    } yield fileToResponse(file)
+  ) getOrElse NotFound("No such document")
+
+  def index() = Action {
+    Ok(views.html.upload.render())
   }
 }

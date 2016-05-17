@@ -1,0 +1,37 @@
+*Ideally* it should be designed like this:
+
+(1) Http service
+- file uploading (e. g. POST /documents + multipart data containing the file itself + metadata)
+- - does file uploading itself plus sends a message to the bus (3),
+    containing the document id, requesting the watermarker (4) to process the document
+- file downloading (e. g. GET /documents/<id>)
+- - returns 404 until the watermark is created, otherwise returns the watermarked document
+- watermarking status querying (e. g. GET /documents/<id>/metadata)
+- - returns the document's metadata containing the watermarking status updated by the watermarker (4)
+
+(2) Document storage (e. g. MongoDB's GridFS?)
+- or e. g. Cassandra (or PostgreSQL? Redis?) + filesystem
+- needs to store both file content and metadata
+- each of the above storage solutions has its own pros/cons
+  which should be aligned with the existing company's infrastructure
+
+(3) Message bus (e. g. Kafka)
+- or e. g. RabbitMQ
+- or maybe Akka however it will limit implementation options for the watermarker (4)
+
+(4) Watermarker
+- does the watermarking itself
+- periodically updates the status of processing
+  (e. g. in progress/finished or maybe even the percentage of processing?)
+
+Using a message bus like Kafka in addition to the document storage makes http service and watermarker independent
+so they can be implemented/deployed/maintained separately in the spirit of microservice driven design.
+
+The questions still to clarify:
+- Which document formats are supported (pdf, doc...??)
+- Should watermarking be implemented in house or are we relying on any 3rd party solutions/services?
+- What kind of throughput in terms of uploads/queries per second to expect?
+- Is there a limit for the document size?
+- How the watermarking status should be reported (just done/not done, or percentage, or what?)
+- How the components of the solution should be secured?
+
