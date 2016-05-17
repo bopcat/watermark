@@ -1,4 +1,4 @@
-*Ideally* it should be designed like this:
+*Ideally* it might be designed like this:
 
 (1) Http service
 - file uploading (e. g. POST /documents + multipart data containing the file itself + metadata)
@@ -29,7 +29,8 @@ so they can be implemented/deployed/maintained separately in the spirit of micro
 
 The questions still to clarify:
 - Which document formats are supported (pdf, doc...??)
-- Should watermarking be implemented in house or are we relying on any 3rd party solutions/services?
+- Should watermarking be implemented in house (e. g. using libraries like itext for manipulating pdfs etc.)
+  or are we relying on any 3rd party solutions/services?
 - What kind of throughput in terms of uploads/queries per second to expect?
 - Is there a limit for the document size?
 - How the watermarking status should be reported (just done/not done, or percentage, or what?)
